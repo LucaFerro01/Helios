@@ -34,11 +34,13 @@ class FinancialKPI:
     
     annual_grid_cost_fixed: float  # € acquistati a tariffa fissa
     annual_grid_income_fixed: float  # € ricavati a tariffa fissa
-    annual_net_benefit_fixed: float  # € beneficio netto annuo
+    annual_net_benefit_fixed: float  # € beneficio netto annuo, OPEX incluso
     
     annual_grid_cost_market: Optional[float] = None  # € a prezzi di mercato
     annual_grid_income_market: Optional[float] = None
     annual_net_benefit_market: Optional[float] = None
+
+    lcoe_eur_kwh: Optional[float] = None  # €/kWh, definizione finanziaria IRENA/IEA
     
     payback_years: Optional[float] = None  # anni necessari per recuperare investimento
     npv_20y: Optional[float] = None  # VAN su 20 anni
@@ -118,6 +120,7 @@ class EconomicsAnalyzer:
         grid_in: np.ndarray,
         grid_out: np.ndarray,
         load_total: float,
+        pv_total_kwh: Optional[float] = None,
         price_arr: Optional[np.ndarray] = None,
         price_paid_arr: Optional[np.ndarray] = None,
         price_earned_arr: Optional[np.ndarray] = None
@@ -129,6 +132,7 @@ class EconomicsAnalyzer:
             grid_in: acquisti dalla rete [kWh]
             grid_out: vendite verso rete [kWh]
             load_total: carico totale [kWh]
+            pv_total_kwh: produzione FV totale [kWh] per il calcolo del LCOE
             price_arr: prezzi orari [€/kWh] (opzionale, per mercato)
             price_paid_arr: costi orari [€] (price-aware)
             price_earned_arr: ricavi orari [€] (price-aware)
@@ -139,11 +143,10 @@ class EconomicsAnalyzer:
         # Scenario TARIFFA FISSA
         cost_fixed = grid_in.sum() * self.config.price_buy_eur_kwh
         income_fixed = grid_out.sum() * self.config.price_sell_eur_kwh
-        net_fixed = cost_fixed - income_fixed
         
         # Baseline tariffa fissa
         baseline_fixed = load_total * self.config.price_buy_eur_kwh
-        benefit_fixed = baseline_fixed - net_fixed  # risparmio annuo
+        benefit_fixed = baseline_fixed - cost_fixed + income_fixed - self.config.opex_eur_year
         
         # Scenario MERCATO (se disponibile)
         cost_market = None
@@ -151,29 +154,52 @@ class EconomicsAnalyzer:
         benefit_market = None
         if price_arr is not None:
             # Assicuriamoci di usare la stessa finestra temporale per i prezzi
-            n = len(grid_in)
-            p = np.asarray(price_arr)
-            p_trim = p[:n] if len(p) >= n else p
+            n = min(len(grid_in), len(price_arr))
+            p = np.asarray(price_arr, dtype=float).reshape(-1)
+            p_trim = p[:n]
             # Costo e ricavo a prezzi di mercato sulle lunghezze disponibili
             cost_market = (grid_in[:len(p_trim)] * p_trim).sum() if len(p_trim) > 0 else 0.0
             income_market = (grid_out[:len(p_trim)] * p_trim).sum() if len(p_trim) > 0 else 0.0
-            # Baseline market: uso prezzo medio sul periodo disponibile
-            mean_price = float(p_trim.mean()) if len(p_trim) > 0 else self.config.price_buy_eur_kwh
+            # Baseline market: uso il prezzo medio del periodo disponibile
+            positive_prices = p_trim[p_trim > 0]
+            if len(positive_prices) > 0:
+                mean_price = float(positive_prices.mean())
+            elif len(p_trim) > 0:
+                mean_price = float(p_trim.mean())
+            else:
+                mean_price = self.config.price_buy_eur_kwh
             baseline_market = load_total * mean_price
-            benefit_market = baseline_market - (cost_market - income_market)
+            benefit_market = baseline_market - cost_market + income_market - self.config.opex_eur_year
         elif price_paid_arr is not None:
             cost_market = float(price_paid_arr.sum())
             income_market = float(price_earned_arr.sum())
             baseline_market = load_total * self.config.price_buy_eur_kwh
-            benefit_market = baseline_market - (cost_market - income_market)
+            benefit_market = baseline_market - cost_market + income_market - self.config.opex_eur_year
+
+        # LCOE finanziario: PV(costi) / PV(energia prodotta)
+        lcoe = None
+        if pv_total_kwh is not None and pv_total_kwh > 0:
+            years = self.config.analysis_years
+            rate = self.config.discount_rate
+            pv_costs = self.config.capex_eur + sum(
+                self.config.opex_eur_year / ((1 + rate) ** year)
+                for year in range(1, years + 1)
+            )
+            pv_energy = sum(
+                pv_total_kwh * (1 - 0.005) ** (year - 1) / ((1 + rate) ** year)
+                for year in range(1, years + 1)
+            )
+            if pv_energy > 0:
+                lcoe = pv_costs / pv_energy
         
         kpi = FinancialKPI(
-            annual_grid_cost_fixed=float(net_fixed),
+            annual_grid_cost_fixed=float(cost_fixed),
             annual_grid_income_fixed=float(income_fixed),
             annual_net_benefit_fixed=float(benefit_fixed),
-            annual_grid_cost_market=float(cost_market) if cost_market else None,
-            annual_grid_income_market=float(income_market) if income_market else None,
-            annual_net_benefit_market=float(benefit_market) if benefit_market else None
+            annual_grid_cost_market=float(cost_market) if cost_market is not None else None,
+            annual_grid_income_market=float(income_market) if income_market is not None else None,
+            annual_net_benefit_market=float(benefit_market) if benefit_market is not None else None,
+            lcoe_eur_kwh=float(lcoe) if lcoe is not None else None
         )
         
         # Calcola payback, NPV, IRR
@@ -184,7 +210,7 @@ class EconomicsAnalyzer:
     def _calculate_investment_returns(self, kpi: FinancialKPI):
         """Calcola payback, NPV e IRR."""
         # Usa il beneficio netto (preferibilmente mercato se disponibile)
-        annual_benefit = kpi.annual_net_benefit_market if kpi.annual_net_benefit_market else kpi.annual_net_benefit_fixed
+        annual_benefit = kpi.annual_net_benefit_market if kpi.annual_net_benefit_market is not None else kpi.annual_net_benefit_fixed
         
         # Payback period
         if annual_benefit > 0:
@@ -196,12 +222,10 @@ class EconomicsAnalyzer:
         years = self.config.analysis_years
         rate = self.config.discount_rate
         
-        # Cash flows: anno 0 = -CAPEX, anni 1-N = +beneficio - OPEX
+        # Cash flows: anno 0 = -CAPEX, anni 1-N = beneficio netto già comprensivo di OPEX
         cashflows = [-self.config.capex_eur]
         for year in range(1, years + 1):
-            cf = annual_benefit - self.config.opex_eur_year
-            # Considera degradazione PV
-            cf *= (1 - 0.005) ** (year - 1)
+            cf = annual_benefit * (1 - 0.005) ** (year - 1)
             cashflows.append(cf)
         
         # Calcola NPV

@@ -79,7 +79,7 @@ def example_basic_simulation():
     print(f"   ✓ Self-Sufficiency: {energy_kpi.self_sufficiency_rate:.1f}%")
     
     financial_kpi = econ.calculate_financial_kpi(
-        grid_in, grid_out, energy_kpi.load_total
+        grid_in, grid_out, energy_kpi.load_total, energy_kpi.pv_production
     )
     print(f"   ✓ Costo annuo acquisti: {financial_kpi.annual_grid_cost_fixed:.2f} €")
     print(f"   ✓ Beneficio netto: {financial_kpi.annual_net_benefit_fixed:.2f} €")
@@ -90,10 +90,10 @@ def example_basic_simulation():
 def example_csv_data():
     """Esempio 2: Simulazione con dati CSV reali."""
     print("\n" + "="*70)
-    print("  ESEMPIO 2: Simulazione con Dati CSV (Colab)")
+    print("  ESEMPIO 2: Simulazione con Dati CSV (Data)")
     print("="*70)
     
-    data_dir = Path("../Colab")
+    data_dir = Path("../Data")
     if not data_dir.exists():
         print(f"   ⚠️ Directory {data_dir} non trovata")
         return
@@ -212,7 +212,7 @@ def example_parameter_sweep():
         )
         
         financial_kpi = econ.calculate_financial_kpi(
-            grid_in, grid_out, energy_kpi.load_total
+            grid_in, grid_out, energy_kpi.load_total, energy_kpi.pv_production
         )
         
         payback = financial_kpi.payback_years or 0

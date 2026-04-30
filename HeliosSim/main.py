@@ -7,7 +7,7 @@ Script principale che orchiestra la simulazione in due modalità:
 
 Usage:
     python main.py                    # Modalità interattiva
-    python main.py simulate ../Colab # Modalità CSV (legge da cartella Colab)
+    python main.py simulate ../Data  # Modalità CSV (legge da cartella Data)
 """
 
 import sys
@@ -209,7 +209,7 @@ def run_simulation_core(
     # === KPI Economici ===
     print("  • Calcolo KPI economici...")
     financial_kpi = econ.calculate_financial_kpi(
-        grid_in, grid_out, energy_kpi.load_total,
+        grid_in, grid_out, energy_kpi.load_total, energy_kpi.pv_production,
         price_arr if config.price_aware.enabled else None,
         price_paid_pa, price_earned_pa
     )
@@ -271,6 +271,8 @@ def print_results(results: dict):
     print(f"  Costo acquisti            : {fin.annual_grid_cost_fixed:10.2f} €/anno")
     print(f"  Ricavo vendite            : {fin.annual_grid_income_fixed:10.2f} €/anno")
     print(f"  Beneficio netto           : {fin.annual_net_benefit_fixed:10.2f} €/anno")
+    if fin.lcoe_eur_kwh is not None:
+        print(f"  LCOE finanziario          : {fin.lcoe_eur_kwh * 100:10.2f} €cent/kWh")
     if fin.payback_years is not None:
         print(f"  Payback investimento      : {fin.payback_years:10.1f} anni")
     if fin.npv_20y is not None:
@@ -350,7 +352,7 @@ def main():
         epilog="""
 Esempi di utilizzo:
   python main.py                    # Modalità interattiva
-  python main.py simulate ../Colab  # Modalità CSV (legge da cartella Colab)
+    python main.py simulate ../Data  # Modalità CSV (legge da cartella Data)
         """
     )
     

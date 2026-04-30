@@ -1,8 +1,8 @@
 """
-Genera un report PDF con KPI e grafici a partire dai dati nella cartella Colab.
+Genera un report PDF con KPI e grafici a partire dai dati nella cartella Data.
 
 Uso:
-  ./venv/bin/python generate_report.py ../Colab report.pdf
+    ./venv/bin/python generate_report.py ../Data report.pdf
 
 Il report è multipagina: riepilogo KPI, profilo orario, SOC batteria, bilancio mensile.
 """
@@ -48,6 +48,8 @@ def create_pdf_report(results: dict, output_path: Path):
         txt.append(f"Costo acquisti (tariffa fissa): {fin.annual_grid_cost_fixed:.2f} €/anno\n")
         txt.append(f"Ricavo vendite (tariffa fissa): {fin.annual_grid_income_fixed:.2f} €/anno\n")
         txt.append(f"Beneficio netto (tariffa fissa): {fin.annual_net_benefit_fixed:.2f} €/anno\n")
+        if fin.lcoe_eur_kwh is not None:
+            txt.append(f"LCOE finanziario: {fin.lcoe_eur_kwh * 100:.2f} €cent/kWh\n")
         if fin.annual_net_benefit_market is not None:
             txt.append(f"Costo acquisti (market): {fin.annual_grid_cost_market:.2f} €/anno\n")
             txt.append(f"Ricavo vendite (market): {fin.annual_grid_income_market:.2f} €/anno\n")

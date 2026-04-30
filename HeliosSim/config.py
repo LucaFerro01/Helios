@@ -88,7 +88,7 @@ class PriceAwareConfig:
     lookahead_hours: float = 4.0
     """Finestra temporale look-ahead [ore] - per valutare FV futuro prima di vendere"""
     
-    arbitrage_min_spread: float = 0.05
+    arbitrage_min_spread: float = 0.04
     """Spread minimo per avviare arbitraggio [€/kWh] - soglia di convenienza"""
     
     price_high_percentile: float = 75.0

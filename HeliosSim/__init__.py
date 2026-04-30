@@ -2,7 +2,7 @@
 HeliosSim - Package initialization
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "HeliosSim Team"
 __description__ = "Simulatore fotovoltaico con batteria e ottimizzazione di mercato"
 

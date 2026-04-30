@@ -11,7 +11,7 @@ Simulatore Python modulare e professionale per impianti fotovoltaici domestici c
 - **Strategie di gestione batteria**:
   - Standard: massimizzazione dell'autoconsumo
   - Price-Aware: arbitraggio sui prezzi di mercato orari
-- **Analisi economica completa**: KPI energetici, analisi finanziaria (NPV, IRR, Payback)
+- **Analisi economica completa**: KPI energetici, analisi finanziaria (NPV, IRR, Payback, LCOE)
 - **Grafici professionali**: profili orari, stato batteria, bilancio mensile, comparazioni
 - **Modularità**: struttura clean with separation of concerns
 
@@ -104,6 +104,7 @@ Disponibilità di valori di default e suggerimenti per valori tipici per ogni pa
   Costo acquisti            :     335.82 €/anno
   Ricavo vendite            :     237.05 €/anno
   Beneficio netto           :     856.23 €/anno
+  LCOE finanziario          :       6.2 €cent/kWh
   Payback investimento      :      14.0 anni
   NPV (20 anni)             : 2847.36 €
   IRR                       :       6.8 %

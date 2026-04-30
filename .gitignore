@@ -34,3 +34,6 @@ results/
 
 # Logs
 *.log
+
+# CSV
+*.csv
