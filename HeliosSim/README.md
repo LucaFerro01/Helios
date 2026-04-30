@@ -49,10 +49,10 @@ pip install -r requirements.txt
 
 ### Uso - Modalità CSV (consigliato per i tuoi dati)
 
-Per caricare i dati dalla cartella Colab:
+Per caricare i dati dalla cartella `Data`:
 
 ```bash
-python main.py simulate ../Colab
+python main.py simulate ../Data
 ```
 
 Questo caricherà automaticamente:
@@ -258,10 +258,10 @@ Ogni run richiede ~2 minuti di configurazione interattiva.
 
 ### 2. Studio Fattibilità Sito
 
-Usa **CSV Mode** con dati reali PVGIS + profili misurati:
+Usa **CSV Mode** con dati reali PVGIS + profili misurati (cartella `Data`):
 
 ```bash
-python main.py simulate /path/to/data
+python main.py simulate /path/to/Data
 ```
 
 Genera report automatico con grafici da presentare agli stakeholder.
