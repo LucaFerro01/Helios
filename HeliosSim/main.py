@@ -381,7 +381,6 @@ def generate_plots(results: dict, output_dir: Path = None):
     has_pa = (results.get('grid_in_pa') is not None and
               not np.array_equal(results['grid_in'], results['grid_in_pa']))
     if has_pa:
-        econ_pa = results.get('energy_kpi')  # reuse already-computed standard KPI as reference
         scenarios = {
             'Standard': {
                 'sc': eng.self_consumption_rate,
@@ -393,6 +392,8 @@ def generate_plots(results: dict, output_dir: Path = None):
             scenarios['Price-Aware'] = {
                 'sc': eng.self_consumption_rate,
                 'ssr': eng.self_sufficiency_rate,
+                # 'cost_fixed' key is required by plot_kpi_comparison; for price-aware
+                # we use the market cost as the representative annual grid cost.
                 'cost_fixed': fin.annual_grid_cost_market,
             }
         if len(scenarios) > 1:

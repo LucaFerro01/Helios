@@ -349,8 +349,11 @@ def plot_daily_average_profile(
     grid_in_mean = grp['grid_in'].mean().reindex(hours, fill_value=0)
     grid_out_mean = grp['grid_out'].mean().reindex(hours, fill_value=0)
 
+    if dt_h <= 0:
+        raise ValueError(f"dt_h must be positive, got {dt_h}")
+
     # Converti kWh → W medi per il periodo dt_h
-    scale = 1000.0 / dt_h if dt_h > 0 else 1000.0
+    scale = 1000.0 / dt_h
 
     fig, ax = plt.subplots(figsize=figsize)
 
@@ -410,6 +413,8 @@ def plot_energy_breakdown_pie(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=figsize)
 
     # --- Torta sinistra: come viene utilizzata la produzione PV ---
+    # Battery charge is estimated as: PV produced − direct self-consumption − grid export.
+    # A max(0) guard handles small rounding errors; inputs are assumed internally consistent.
     bat_charge = max(pv_production - energy_from_pv_direct - energy_to_grid, 0)
     pv_sizes = [energy_from_pv_direct, bat_charge, energy_to_grid]
     pv_labels = [
