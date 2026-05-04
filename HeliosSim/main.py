@@ -26,6 +26,8 @@ from economics import EconomicsAnalyzer
 from visualization import (
     setup_plotting_style, plot_hourly_profile, plot_battery_soc,
     plot_monthly_energy, plot_kpi_comparison, plot_financial_comparison,
+    plot_daily_average_profile, plot_energy_breakdown_pie,
+    plot_npv_cashflow, plot_price_aware_comparison,
     save_all_plots
 )
 from cli import configure_simulation_interactive, print_configuration_summary
@@ -305,9 +307,15 @@ def generate_plots(results: dict, output_dir: Path = None):
     
     print(f"\n📈 Generazione grafici...")
     figures = {}
-    
-    # Grafico profilo orario
-    fig = plot_hourly_profile(
+
+    config = results['config']
+    eng = results['energy_kpi']
+    fin = results['financial_kpi']
+    dt_h = results.get('dt_h', 1.0)
+    soc_max_kwh = config.battery.soc_max * config.battery.capacity_kwh
+
+    # 01 — Profilo orario (prima settimana)
+    figures['01_hourly_profile'] = plot_hourly_profile(
         results['idx'],
         results['pv_kwh'],
         results['load_kwh'],
@@ -315,19 +323,17 @@ def generate_plots(results: dict, output_dir: Path = None):
         results['grid_out'],
         title="Profilo Orario Energetico (Prima Settimana)"
     )
-    figures['01_hourly_profile'] = fig
-    
-    # Grafico SOC batteria
-    fig = plot_battery_soc(
+
+    # 02 — SOC batteria (30 giorni)
+    figures['02_battery_soc'] = plot_battery_soc(
         results['idx'],
         results['soc'],
-        results['config'].battery.soc_min * results['config'].battery.capacity_kwh,
-        results['config'].battery.soc_max * results['config'].battery.capacity_kwh
+        config.battery.soc_min * config.battery.capacity_kwh,
+        soc_max_kwh
     )
-    figures['02_battery_soc'] = fig
-    
-    # Grafico bilancio mensile
-    fig = plot_monthly_energy(
+
+    # 03 — Bilancio mensile
+    figures['03_monthly_energy'] = plot_monthly_energy(
         results['idx'],
         results['pv_kwh'],
         results['load_kwh'],
@@ -336,8 +342,99 @@ def generate_plots(results: dict, output_dir: Path = None):
         results['bat_ch'],
         results['bat_dch']
     )
-    figures['03_monthly_energy'] = fig
-    
+
+    # 04 — Profilo medio giornaliero
+    figures['04_daily_avg_profile'] = plot_daily_average_profile(
+        results['idx'],
+        results['pv_kwh'],
+        results['load_kwh'],
+        results['grid_in'],
+        results['grid_out'],
+        dt_h=dt_h
+    )
+
+    # 05 — Ripartizione energetica (torte)
+    figures['05_energy_breakdown'] = plot_energy_breakdown_pie(
+        pv_production=eng.pv_production,
+        load_total=eng.load_total,
+        energy_from_pv_direct=eng.energy_from_pv_direct,
+        energy_from_battery=eng.energy_from_battery,
+        energy_to_grid=eng.energy_to_grid,
+        energy_from_grid=eng.energy_from_grid
+    )
+
+    # 06 — Flusso di cassa / NPV cumulato
+    if fin.payback_years is not None or fin.npv_20y is not None:
+        annual_benefit = (fin.annual_net_benefit_market
+                         if fin.annual_net_benefit_market is not None
+                         else fin.annual_net_benefit_fixed)
+        figures['06_npv_cashflow'] = plot_npv_cashflow(
+            capex_eur=config.economics.capex_eur,
+            annual_benefit=annual_benefit,
+            analysis_years=config.economics.analysis_years,
+            discount_rate=config.economics.discount_rate,
+            pv_degradation_rate=config.pv.degradation_yearly,
+            payback_years=fin.payback_years
+        )
+
+    # 07 — Comparazione KPI energetici tra scenari standard/price-aware
+    has_pa = (results.get('grid_in_pa') is not None and
+              not np.array_equal(results['grid_in'], results['grid_in_pa']))
+    if has_pa:
+        econ_pa = results.get('energy_kpi')  # reuse already-computed standard KPI as reference
+        scenarios = {
+            'Standard': {
+                'sc': eng.self_consumption_rate,
+                'ssr': eng.self_sufficiency_rate,
+                'cost_fixed': fin.annual_grid_cost_fixed,
+            },
+        }
+        if fin.annual_grid_cost_market is not None:
+            scenarios['Price-Aware'] = {
+                'sc': eng.self_consumption_rate,
+                'ssr': eng.self_sufficiency_rate,
+                'cost_fixed': fin.annual_grid_cost_market,
+            }
+        if len(scenarios) > 1:
+            figures['07_kpi_comparison'] = plot_kpi_comparison(scenarios)
+
+        # 08 — Confronto flussi rete + SOC: standard vs price-aware
+        figures['08_price_aware_comparison'] = plot_price_aware_comparison(
+            idx=results['idx'],
+            grid_in_std=results['grid_in'],
+            grid_out_std=results['grid_out'],
+            soc_std=results['soc'],
+            grid_in_pa=results['grid_in_pa'],
+            grid_out_pa=results['grid_out_pa'],
+            soc_pa=results['soc_pa'],
+            soc_max=soc_max_kwh
+        )
+    else:
+        # Solo scenario standard
+        scenarios = {
+            'Standard': {
+                'sc': eng.self_consumption_rate,
+                'ssr': eng.self_sufficiency_rate,
+                'cost_fixed': fin.annual_grid_cost_fixed,
+            },
+        }
+        figures['07_kpi_comparison'] = plot_kpi_comparison(scenarios)
+
+    # 09 — Comparazione economica
+    fin_scenarios = {
+        'Standard': {
+            'cost': fin.annual_grid_cost_fixed,
+            'income': fin.annual_grid_income_fixed,
+        },
+    }
+    if fin.annual_grid_cost_market is not None:
+        fin_scenarios['Price-Aware'] = {
+            'cost': fin.annual_grid_cost_market,
+            'income': fin.annual_grid_income_market,
+        }
+    baseline = eng.load_total * config.economics.price_buy_eur_kwh
+    figures['09_financial_comparison'] = plot_financial_comparison(baseline, fin_scenarios)
+
     # Salva
     save_all_plots(figures, output_dir)
     print(f"✅ Grafici salvati in {output_dir}\n")
