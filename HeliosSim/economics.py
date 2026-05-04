@@ -123,7 +123,8 @@ class EconomicsAnalyzer:
         pv_total_kwh: Optional[float] = None,
         price_arr: Optional[np.ndarray] = None,
         price_paid_arr: Optional[np.ndarray] = None,
-        price_earned_arr: Optional[np.ndarray] = None
+        price_earned_arr: Optional[np.ndarray] = None,
+        pv_degradation_rate: float = 0.005
     ) -> FinancialKPI:
         """
         Calcola i KPI finanziari.
@@ -136,6 +137,7 @@ class EconomicsAnalyzer:
             price_arr: prezzi orari [€/kWh] (opzionale, per mercato)
             price_paid_arr: costi orari [€] (price-aware)
             price_earned_arr: ricavi orari [€] (price-aware)
+            pv_degradation_rate: degrado annuo FV [frazione/anno] (default 0.005)
         
         Returns:
             FinancialKPI
@@ -186,7 +188,7 @@ class EconomicsAnalyzer:
                 for year in range(1, years + 1)
             )
             pv_energy = sum(
-                pv_total_kwh * (1 - 0.005) ** (year - 1) / ((1 + rate) ** year)
+                pv_total_kwh * (1 - pv_degradation_rate) ** (year - 1) / ((1 + rate) ** year)
                 for year in range(1, years + 1)
             )
             if pv_energy > 0:
@@ -203,11 +205,11 @@ class EconomicsAnalyzer:
         )
         
         # Calcola payback, NPV, IRR
-        self._calculate_investment_returns(kpi)
+        self._calculate_investment_returns(kpi, pv_degradation_rate)
         
         return kpi
     
-    def _calculate_investment_returns(self, kpi: FinancialKPI):
+    def _calculate_investment_returns(self, kpi: FinancialKPI, pv_degradation_rate: float = 0.005):
         """Calcola payback, NPV e IRR."""
         # Usa il beneficio netto (preferibilmente mercato se disponibile)
         annual_benefit = kpi.annual_net_benefit_market if kpi.annual_net_benefit_market is not None else kpi.annual_net_benefit_fixed
@@ -225,7 +227,7 @@ class EconomicsAnalyzer:
         # Cash flows: anno 0 = -CAPEX, anni 1-N = beneficio netto già comprensivo di OPEX
         cashflows = [-self.config.capex_eur]
         for year in range(1, years + 1):
-            cf = annual_benefit * (1 - 0.005) ** (year - 1)
+            cf = annual_benefit * (1 - pv_degradation_rate) ** (year - 1)
             cashflows.append(cf)
         
         # Calcola NPV

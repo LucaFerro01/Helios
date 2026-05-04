@@ -14,7 +14,10 @@ import matplotlib.pyplot as plt
 
 from main import run_simulation_csv_mode, print_results
 from visualization import (
-    setup_plotting_style, plot_hourly_profile, plot_battery_soc, plot_monthly_energy
+    setup_plotting_style, plot_hourly_profile, plot_battery_soc, plot_monthly_energy,
+    plot_daily_average_profile, plot_energy_breakdown_pie,
+    plot_npv_cashflow, plot_price_aware_comparison,
+    plot_kpi_comparison, plot_financial_comparison,
 )
 
 
@@ -23,14 +26,19 @@ def create_pdf_report(results: dict, output_path: Path):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    import numpy as np
+
+    cfg = results['config']
+    eng = results['energy_kpi']
+    fin = results['financial_kpi']
+    dt_h = results.get('dt_h', 1.0)
+    soc_max_kwh = cfg.battery.soc_max * cfg.battery.capacity_kwh
+
     with PdfPages(output_path) as pdf:
-        # Page 1: testo riepilogativo
+        # ── Page 1: testo riepilogativo ─────────────────────────────────────
         fig_text = plt.figure(figsize=(8.27, 11.69))  # A4 portrait
         fig_text.clf()
         txt = []
-        cfg = results['config']
-        eng = results['energy_kpi']
-        fin = results['financial_kpi']
 
         txt.append(f"HeliosSim - Report di Simulazione\n\nSito: {cfg.site_name} ({cfg.latitude}°, {cfg.longitude}°)\n")
         txt.append("=== KPI Energetici ===\n")
@@ -61,36 +69,111 @@ def create_pdf_report(results: dict, output_path: Path):
         if fin.irr is not None:
             txt.append(f"IRR: {fin.irr*100:.1f} %\n")
 
-        # Render text
         fig_text.text(0.02, 0.98, "\n".join(txt), va='top', fontsize=10, family='monospace')
         pdf.savefig(fig_text)
         plt.close(fig_text)
 
-        # Page 2: profilo orario (prima settimana)
+        # ── Page 2: profilo orario (prima settimana) ────────────────────────
         fig1 = plot_hourly_profile(
-            results['idx'], results['pv_kwh'], results['load_kwh'], results['grid_in'], results['grid_out'],
+            results['idx'], results['pv_kwh'], results['load_kwh'],
+            results['grid_in'], results['grid_out'],
             title='Profilo Orario Energetico (Prima Settimana)'
         )
         pdf.savefig(fig1)
         plt.close(fig1)
 
-        # Page 3: SOC batteria
+        # ── Page 3: profilo medio giornaliero ───────────────────────────────
+        fig_daily = plot_daily_average_profile(
+            results['idx'], results['pv_kwh'], results['load_kwh'],
+            results['grid_in'], results['grid_out'],
+            dt_h=dt_h,
+            title='Profilo Medio Giornaliero (media annua per ora del giorno)'
+        )
+        pdf.savefig(fig_daily)
+        plt.close(fig_daily)
+
+        # ── Page 4: SOC batteria (30 giorni) ────────────────────────────────
         fig2 = plot_battery_soc(
             results['idx'], results['soc'],
-            results['config'].battery.soc_min * results['config'].battery.capacity_kwh,
-            results['config'].battery.soc_max * results['config'].battery.capacity_kwh,
+            cfg.battery.soc_min * cfg.battery.capacity_kwh,
+            soc_max_kwh,
             title='Stato di Carica Batteria (30 giorni)'
         )
         pdf.savefig(fig2)
         plt.close(fig2)
 
-        # Page 4: bilancio mensile
+        # ── Page 5: bilancio mensile ─────────────────────────────────────────
         fig3 = plot_monthly_energy(
-            results['idx'], results['pv_kwh'], results['load_kwh'], results['grid_in'], results['grid_out'], results['bat_ch'], results['bat_dch'],
+            results['idx'], results['pv_kwh'], results['load_kwh'],
+            results['grid_in'], results['grid_out'],
+            results['bat_ch'], results['bat_dch'],
             title='Bilancio Energetico Mensile'
         )
         pdf.savefig(fig3)
         plt.close(fig3)
+
+        # ── Page 6: ripartizione energetica (torte) ─────────────────────────
+        fig_pie = plot_energy_breakdown_pie(
+            pv_production=eng.pv_production,
+            load_total=eng.load_total,
+            energy_from_pv_direct=eng.energy_from_pv_direct,
+            energy_from_battery=eng.energy_from_battery,
+            energy_to_grid=eng.energy_to_grid,
+            energy_from_grid=eng.energy_from_grid
+        )
+        pdf.savefig(fig_pie)
+        plt.close(fig_pie)
+
+        # ── Page 7: flusso di cassa / NPV cumulato ──────────────────────────
+        annual_benefit = (fin.annual_net_benefit_market
+                         if fin.annual_net_benefit_market is not None
+                         else fin.annual_net_benefit_fixed)
+        fig_npv = plot_npv_cashflow(
+            capex_eur=cfg.economics.capex_eur,
+            annual_benefit=annual_benefit,
+            analysis_years=cfg.economics.analysis_years,
+            discount_rate=cfg.economics.discount_rate,
+            pv_degradation_rate=cfg.pv.degradation_yearly,
+            payback_years=fin.payback_years,
+            title='Flusso di Cassa Cumulato e NPV nel Tempo'
+        )
+        pdf.savefig(fig_npv)
+        plt.close(fig_npv)
+
+        # ── Page 8: comparazione economica ──────────────────────────────────
+        fin_scenarios = {
+            'Standard': {
+                'cost': fin.annual_grid_cost_fixed,
+                'income': fin.annual_grid_income_fixed,
+            },
+        }
+        if fin.annual_grid_cost_market is not None:
+            fin_scenarios['Price-Aware'] = {
+                'cost': fin.annual_grid_cost_market,
+                'income': fin.annual_grid_income_market,
+            }
+        baseline = eng.load_total * cfg.economics.price_buy_eur_kwh
+        fig_fin = plot_financial_comparison(baseline, fin_scenarios)
+        pdf.savefig(fig_fin)
+        plt.close(fig_fin)
+
+        # ── Page 9 (opzionale): confronto standard vs price-aware ───────────
+        has_pa = (results.get('grid_in_pa') is not None and
+                  not np.array_equal(results['grid_in'], results['grid_in_pa']))
+        if has_pa:
+            fig_pa = plot_price_aware_comparison(
+                idx=results['idx'],
+                grid_in_std=results['grid_in'],
+                grid_out_std=results['grid_out'],
+                soc_std=results['soc'],
+                grid_in_pa=results['grid_in_pa'],
+                grid_out_pa=results['grid_out_pa'],
+                soc_pa=results['soc_pa'],
+                soc_max=soc_max_kwh,
+                title='Confronto Standard vs Price-Aware (Prima Settimana)'
+            )
+            pdf.savefig(fig_pa)
+            plt.close(fig_pa)
 
     print(f"Report PDF creato: {output_path}")
 
