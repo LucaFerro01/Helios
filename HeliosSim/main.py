@@ -211,7 +211,8 @@ def run_simulation_core(
     financial_kpi = econ.calculate_financial_kpi(
         grid_in, grid_out, energy_kpi.load_total, energy_kpi.pv_production,
         price_arr if config.price_aware.enabled else None,
-        price_paid_pa, price_earned_pa
+        price_paid_pa, price_earned_pa,
+        pv_degradation_rate=config.pv.degradation_yearly
     )
     
     print("\n✅ Simulazione completata!\n")

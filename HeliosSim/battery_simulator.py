@@ -220,7 +220,8 @@ class BatterySimulator:
                     # Look-ahead fallito: comportamento standard
                     self._apply_standard_logic(
                         surplus, soc_t, p,
-                        i, bat_ch, bat_dch, grid_in, grid_out, price_paid, price_earned
+                        i, bat_ch, bat_dch, grid_in, grid_out, price_paid, price_earned,
+                        dt_h
                     )
                     soc = self._update_soc(soc_t, bat_ch[i], bat_dch[i])
             
@@ -250,7 +251,8 @@ class BatterySimulator:
                 # Prezzo nella fascia media: comportamento standard
                 self._apply_standard_logic(
                     surplus, soc_t, p,
-                    i, bat_ch, bat_dch, grid_in, grid_out, price_paid, price_earned
+                    i, bat_ch, bat_dch, grid_in, grid_out, price_paid, price_earned,
+                    dt_h
                 )
                 soc = self._update_soc(soc_t, bat_ch[i], bat_dch[i])
             
@@ -262,12 +264,13 @@ class BatterySimulator:
     
     def _apply_standard_logic(
         self, surplus, soc_t, p,
-        i, bat_ch, bat_dch, grid_in, grid_out, price_paid, price_earned
+        i, bat_ch, bat_dch, grid_in, grid_out, price_paid, price_earned,
+        dt_h: float = 1.0
     ):
         """Helper: applica logica standard (autoconsumo)."""
         if surplus > 0:
             e_ch = min(
-                self.config.p_charge_kw * 1.0,
+                self.config.p_charge_kw * dt_h,
                 (self.soc_max - soc_t) / self.eta_c,
                 surplus
             )
@@ -278,7 +281,7 @@ class BatterySimulator:
         else:
             deficit = -surplus
             e_dc = min(
-                self.config.p_discharge_kw * 1.0,
+                self.config.p_discharge_kw * dt_h,
                 (soc_t - self.soc_min) * self.eta_d,
                 deficit
             )
